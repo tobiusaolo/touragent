@@ -1,0 +1,228 @@
+{
+  "examples": [
+    {
+      "name": "Basic Gorilla Trekking Tour",
+      "description": "Simple 3-night gorilla trekking trip for 2 adults",
+      "rfq_data": {
+        "tourist_type": "non_resident_foreigner",
+        "class_preference": "mid_range",
+        "guests": {
+          "adults": 2,
+          "children": 0,
+          "total": 2
+        },
+        "nights": 3,
+        "locations": ["Kampala", "Bwindi"],
+        "activities_interest": ["gorilla trekking"],
+        "travel_dates": {
+          "check_in": "2025-06-15",
+          "check_out": "2025-06-18"
+        }
+      }
+    },
+    {
+      "name": "Luxury Safari and Gorilla Trekking",
+      "description": "Premium 7-night tour with multiple activities",
+      "rfq_data": {
+        "tourist_type": "non_resident_foreigner",
+        "class_preference": "luxury",
+        "guests": {
+          "adults": 2,
+          "children": 1,
+          "total": 3
+        },
+        "nights": 7,
+        "locations": ["Kampala", "Bwindi", "Queen Elizabeth National Park"],
+        "activities_interest": ["gorilla trekking", "safari", "chimpanzee tracking"],
+        "travel_dates": {
+          "check_in": "2025-07-01",
+          "check_out": "2025-07-08"
+        },
+        "budget_range": {
+          "max": 10000,
+          "currency": "USD"
+        }
+      }
+    },
+    {
+      "name": "Budget Safari Trip",
+      "description": "Affordable 5-day safari for 1 adult",
+      "rfq_data": {
+        "tourist_type": "non_resident_foreigner",
+        "class_preference": "budget",
+        "guests": {
+          "adults": 1,
+          "children": 0,
+          "total": 1
+        },
+        "nights": 5,
+        "locations": ["Kampala", "Queen Elizabeth National Park"],
+        "activities_interest": ["safari"],
+        "travel_dates": {
+          "check_in": "2025-08-10",
+          "check_out": "2025-08-15"
+        }
+      }
+    },
+    {
+      "name": "Family Adventure Tour",
+      "description": "Mid-range family trip with multiple activities",
+      "rfq_data": {
+        "tourist_type": "non_resident_foreigner",
+        "class_preference": "mid_range",
+        "guests": {
+          "adults": 2,
+          "children": 2,
+          "total": 4
+        },
+        "nights": 6,
+        "locations": ["Kampala", "Jinja", "Bwindi"],
+        "activities_interest": ["white water rafting", "gorilla trekking", "safari"],
+        "travel_dates": {
+          "check_in": "2025-09-01",
+          "check_out": "2025-09-07"
+        },
+        "special_requests": "Family-friendly accommodations, child-friendly activities"
+      }
+    },
+    {
+      "name": "Resident Budget Tour",
+      "description": "Budget tour for Ugandan resident",
+      "rfq_data": {
+        "tourist_type": "resident",
+        "class_preference": "budget",
+        "guests": {
+          "adults": 1,
+          "children": 0,
+          "total": 1
+        },
+        "nights": 4,
+        "locations": ["Kampala", "Jinja"],
+        "activities_interest": ["white water rafting", "bungee jumping"],
+        "travel_dates": {
+          "check_in": "2025-10-15",
+          "check_out": "2025-10-19"
+        }
+      }
+    },
+    {
+      "name": "East African Citizen Tour",
+      "description": "Tour for East African citizen",
+      "rfq_data": {
+        "tourist_type": "african",
+        "class_preference": "mid_range",
+        "guests": {
+          "adults": 2,
+          "children": 0,
+          "total": 2
+        },
+        "nights": 5,
+        "locations": ["Kampala", "Bwindi", "Kibale"],
+        "activities_interest": ["gorilla trekking", "chimpanzee tracking"],
+        "travel_dates": {
+          "check_in": "2025-11-01",
+          "check_out": "2025-11-06"
+        }
+      }
+    },
+    {
+      "name": "Extended Wildlife Safari",
+      "description": "Comprehensive 10-night wildlife experience",
+      "rfq_data": {
+        "tourist_type": "non_resident_foreigner",
+        "class_preference": "luxury",
+        "guests": {
+          "adults": 2,
+          "children": 0,
+          "total": 2
+        },
+        "nights": 10,
+        "locations": [
+          "Kampala",
+          "Queen Elizabeth National Park",
+          "Murchison Falls National Park",
+          "Bwindi"
+        ],
+        "activities_interest": [
+          "safari",
+          "gorilla trekking",
+          "chimpanzee tracking",
+          "bird watching"
+        ],
+        "travel_dates": {
+          "check_in": "2025-12-01",
+          "check_out": "2025-12-11"
+        },
+        "budget_range": {
+          "max": 15000,
+          "currency": "USD"
+        },
+        "accommodation_preferences": ["Luxury lodges", "Safari camps"]
+      }
+    },
+    {
+      "name": "Adventure Sports Tour",
+      "description": "Adventure activities focused tour",
+      "rfq_data": {
+        "tourist_type": "non_resident_foreigner",
+        "class_preference": "mid_range",
+        "guests": {
+          "adults": 2,
+          "children": 0,
+          "total": 2
+        },
+        "nights": 4,
+        "locations": ["Jinja", "Kampala"],
+        "activities_interest": [
+          "white water rafting",
+          "bungee jumping"
+        ],
+        "travel_dates": {
+          "check_in": "2025-08-20",
+          "check_out": "2025-08-24"
+        }
+      }
+    },
+    {
+      "name": "Minimal RFQ (Testing)",
+      "description": "Minimal RFQ with only required fields",
+      "rfq_data": {
+        "tourist_type": "non_resident_foreigner",
+        "guests": {
+          "adults": 1,
+          "children": 0,
+          "total": 1
+        }
+      }
+    },
+    {
+      "name": "Complete RFQ with All Fields",
+      "description": "RFQ with all possible fields filled",
+      "rfq_data": {
+        "tourist_type": "non_resident_foreigner",
+        "class_preference": "mid_range",
+        "guests": {
+          "adults": 2,
+          "children": 1,
+          "total": 3
+        },
+        "nights": 5,
+        "locations": ["Kampala", "Bwindi", "Jinja"],
+        "activities_interest": ["gorilla trekking", "safari", "white water rafting"],
+        "travel_dates": {
+          "check_in": "2025-07-15",
+          "check_out": "2025-07-20"
+        },
+        "budget_range": {
+          "min": 2000,
+          "max": 5000,
+          "currency": "USD"
+        },
+        "accommodation_preferences": ["Mid-range hotels", "Safari lodges"],
+        "requirements": ["Vegetarian meals", "WiFi"],
+        "special_requests": "Need airport pickup and drop-off"
+      }
+    }
+  ]
+}
+
