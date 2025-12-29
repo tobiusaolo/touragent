@@ -1337,7 +1337,7 @@ function ChatInterface() {
             )}
           </Box>
           {(isStreaming || isLoading) && messages.length > 0 && messages[messages.length - 1].role === 'user' && (
-            <Box sx={{ pt: 2, px: 2 }}>
+            <Box sx={{ pt: 1.5, px: { xs: 2, sm: 3 } }}>
               <ProgressIndicator 
                 currentMessage={currentMessage || { type: 'thinking', message: 'Processing your request...' }} 
                 progress={currentProgress} 
