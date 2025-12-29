@@ -23,9 +23,13 @@ import {
   Description as VisaIcon,
   PictureAsPdf as PdfIcon,
   FileDownload as FileDownloadIcon,
+  Edit as EditIcon,
+  ContentCopy as DuplicateIcon,
+  Share as ShareIcon,
+  Description as WordIcon,
 } from '@mui/icons-material';
 
-const QuotationCard = ({ quotation }) => {
+const QuotationCard = ({ quotation, onRefine, onDuplicate, onShare }) => {
   const formatCurrency = (amount) => {
     return new Intl.NumberFormat('en-US', {
       style: 'currency',
@@ -145,6 +149,290 @@ const QuotationCard = ({ quotation }) => {
     // For PDF, we'll use a simple approach - open print dialog
     // In production, you'd use a library like jsPDF or html2pdf
     window.print();
+  };
+
+  const downloadAsWord = () => {
+    if (!quotation) return;
+    
+    const breakdown = quotation.total_cost?.breakdown || quotation.breakdown || {};
+    const components = quotation.components || {};
+    const totalCost = quotation.total_cost?.total_usd || 0;
+    const rfqSummary = quotation.rfq_summary || quotation.rfq_data || {};
+    const workflowId = quotation.workflow_id || `QUO-${Date.now()}`;
+    const date = new Date().toLocaleDateString('en-US', { 
+      year: 'numeric', 
+      month: 'long', 
+      day: 'numeric' 
+    });
+    
+    // Get hotel and activity data
+    const hotels = components.hotel?.recommended_hotels || components.hotel?.cost?.breakdown || breakdown.hotel?.breakdown || [];
+    const hotelTotal = components.hotel?.cost?.total_usd || breakdown.hotel?.total_usd || 0;
+    const activities = components.activities?.cost?.breakdown || breakdown.activities?.breakdown || [];
+    const activitiesTotal = components.activities?.cost?.total_usd || breakdown.activities?.total_usd || 0;
+    
+    // Build table rows
+    let tableRows = '';
+    
+    if (hotels.length > 0) {
+      hotels.forEach((hotel) => {
+        const hotelName = (hotel.hotel_name || hotel.name || 'Hotel').replace(/"/g, '&quot;');
+        const location = (hotel.location || 'N/A').replace(/"/g, '&quot;');
+        tableRows += `<tr>
+          <td>Accommodation</td>
+          <td>${hotelName} - ${location}${hotel.rating ? ` (${hotel.rating}⭐)` : ''}${hotel.nights ? ` - ${hotel.nights} night(s)` : ''}</td>
+          <td style="text-align: right;">${formatCurrency(hotel.total_usd || hotel.price_per_night_usd || 0)}</td>
+        </tr>`;
+      });
+    } else if (hotelTotal > 0) {
+      tableRows += `<tr>
+        <td>Accommodation</td>
+        <td>Hotel accommodation</td>
+        <td style="text-align: right;">${formatCurrency(hotelTotal)}</td>
+      </tr>`;
+    }
+    
+    if (activities.length > 0) {
+      activities.forEach((activity) => {
+        const activityName = (activity.activity || activity.name || 'Activity').replace(/"/g, '&quot;');
+        const location = activity.location ? ` - ${activity.location.replace(/"/g, '&quot;')}` : '';
+        tableRows += `<tr>
+          <td>Activity</td>
+          <td>${activityName}${location}</td>
+          <td style="text-align: right;">${formatCurrency(activity.price_usd || activity.total_cost_usd || 0)}</td>
+        </tr>`;
+      });
+    } else if (activitiesTotal > 0) {
+      tableRows += `<tr>
+        <td>Activities</td>
+        <td>Tour activities</td>
+        <td style="text-align: right;">${formatCurrency(activitiesTotal)}</td>
+      </tr>`;
+    }
+    
+    if (breakdown.vehicle?.total_usd > 0) {
+      const vehicleType = (breakdown.vehicle.vehicle_type || 'Vehicle rental').replace(/"/g, '&quot;');
+      tableRows += `<tr>
+        <td>Vehicle Rental</td>
+        <td>${vehicleType}</td>
+        <td style="text-align: right;">${formatCurrency(breakdown.vehicle.total_usd)}</td>
+      </tr>`;
+    }
+    
+    if (breakdown.fuel?.total_usd > 0) {
+      const fuelType = (breakdown.fuel.fuel_type || 'Fuel').replace(/"/g, '&quot;');
+      tableRows += `<tr>
+        <td>Fuel</td>
+        <td>${fuelType} - ${breakdown.fuel.total_liters || 0}L</td>
+        <td style="text-align: right;">${formatCurrency(breakdown.fuel.total_usd)}</td>
+      </tr>`;
+    }
+    
+    if (breakdown.tour_guide?.total_usd > 0) {
+      tableRows += `<tr>
+        <td>Tour Guide</td>
+        <td>${breakdown.tour_guide.days || 0} day(s) @ ${formatCurrency(breakdown.tour_guide.fee_per_day_usd || 0)}/day</td>
+        <td style="text-align: right;">${formatCurrency(breakdown.tour_guide.total_usd)}</td>
+      </tr>`;
+    }
+    
+    if (breakdown.flight?.total_usd > 0) {
+      tableRows += `<tr>
+        <td>Flight</td>
+        <td>Flight tickets</td>
+        <td style="text-align: right;">${formatCurrency(breakdown.flight.total_usd)}</td>
+      </tr>`;
+    }
+    
+    if (breakdown.visa?.total_usd > 0) {
+      tableRows += `<tr>
+        <td>Visa</td>
+        <td>Visa processing</td>
+        <td style="text-align: right;">${formatCurrency(breakdown.visa.total_usd)}</td>
+      </tr>`;
+    }
+    
+    // Create professional Word-compatible HTML document
+    const htmlContent = `<!DOCTYPE html>
+<html xmlns:o='urn:schemas-microsoft-com:office:office' xmlns:w='urn:schemas-microsoft-com:office:word' xmlns='http://www.w3.org/TR/REC-html40'>
+<head>
+<meta charset='utf-8'>
+<title>Tour Quotation - ${workflowId}</title>
+<!--[if gte mso 9]>
+<xml>
+  <w:WordDocument>
+    <w:View>Print</w:View>
+    <w:Zoom>100</w:Zoom>
+    <w:DoNotOptimizeForBrowser/>
+  </w:WordDocument>
+</xml>
+<![endif]-->
+<style>
+  @page {
+    size: 8.5in 11in;
+    margin: 0.5in;
+  }
+  body {
+    font-family: 'Calibri', 'Arial', sans-serif;
+    font-size: 11pt;
+    line-height: 1.5;
+    color: #000000;
+    margin: 0;
+    padding: 20px;
+  }
+  .header {
+    border-bottom: 3px solid #000000;
+    padding-bottom: 15px;
+    margin-bottom: 30px;
+  }
+  .header h1 {
+    margin: 0;
+    font-size: 24pt;
+    font-weight: bold;
+    color: #000000;
+    letter-spacing: 1px;
+  }
+  .header-info {
+    margin-top: 10px;
+    font-size: 10pt;
+    color: #666666;
+  }
+  .section {
+    margin: 25px 0;
+  }
+  .section-title {
+    font-size: 14pt;
+    font-weight: bold;
+    color: #000000;
+    border-bottom: 2px solid #000000;
+    padding-bottom: 5px;
+    margin-bottom: 15px;
+  }
+  table {
+    width: 100%;
+    border-collapse: collapse;
+    margin: 15px 0;
+  }
+  table th {
+    background-color: #000000;
+    color: #ffffff;
+    padding: 10px;
+    text-align: left;
+    font-weight: bold;
+    font-size: 10pt;
+  }
+  table td {
+    padding: 8px 10px;
+    border-bottom: 1px solid #e5e5e5;
+    font-size: 10pt;
+  }
+  table tr:last-child td {
+    border-bottom: 2px solid #000000;
+  }
+  .total-section {
+    margin-top: 30px;
+    padding: 20px;
+    background-color: #f5f5f5;
+    border: 2px solid #000000;
+  }
+  .total-amount {
+    font-size: 20pt;
+    font-weight: bold;
+    color: #000000;
+    text-align: right;
+  }
+  .footer {
+    margin-top: 40px;
+    padding-top: 20px;
+    border-top: 1px solid #e5e5e5;
+    font-size: 9pt;
+    color: #666666;
+  }
+  .info-row {
+    margin: 8px 0;
+  }
+  .info-label {
+    font-weight: bold;
+    display: inline-block;
+    width: 150px;
+  }
+</style>
+</head>
+<body>
+  <div class="header">
+    <h1>OFFICIAL TOUR QUOTATION</h1>
+    <div class="header-info">
+      <div class="info-row">
+        <span class="info-label">Quotation Number:</span>
+        <span>${workflowId}</span>
+      </div>
+      <div class="info-row">
+        <span class="info-label">Date:</span>
+        <span>${date}</span>
+      </div>
+    </div>
+  </div>
+
+  <div class="section">
+    <div class="section-title">TOUR DETAILS</div>
+    ${rfqSummary.tourist_type ? `<div class="info-row"><span class="info-label">Tourist Type:</span><span>${rfqSummary.tourist_type.replace(/_/g, ' ').toUpperCase()}</span></div>` : ''}
+    ${rfqSummary.guests ? `<div class="info-row"><span class="info-label">Guests:</span><span>${rfqSummary.guests.adults || 0} Adult(s), ${rfqSummary.guests.children || 0} Child(ren) (Total: ${rfqSummary.guests.total || 0})</span></div>` : ''}
+    ${rfqSummary.locations && rfqSummary.locations.length > 0 ? `<div class="info-row"><span class="info-label">Locations:</span><span>${rfqSummary.locations.join(', ')}</span></div>` : ''}
+    ${rfqSummary.activities && rfqSummary.activities.length > 0 ? `<div class="info-row"><span class="info-label">Activities:</span><span>${rfqSummary.activities.join(', ')}</span></div>` : ''}
+  </div>
+
+  <div class="section">
+    <div class="section-title">COST BREAKDOWN</div>
+    <table>
+      <thead>
+        <tr>
+          <th>Item</th>
+          <th>Description</th>
+          <th style="text-align: right;">Amount (USD)</th>
+        </tr>
+      </thead>
+      <tbody>
+        ${tableRows}
+      </tbody>
+    </table>
+  </div>
+
+  <div class="total-section">
+    <div style="text-align: right;">
+      <div style="font-size: 12pt; margin-bottom: 10px;">TOTAL COST</div>
+      <div class="total-amount">${formatCurrency(totalCost)}</div>
+    </div>
+  </div>
+
+  <div class="footer">
+    <p><strong>Terms & Conditions:</strong></p>
+    <ul style="margin: 10px 0; padding-left: 20px;">
+      <li>This quotation is valid for 30 days from the date of issue.</li>
+      <li>Prices are subject to change based on availability and exchange rates.</li>
+      <li>Each agent applies its own commission rate.</li>
+      <li>All costs are in USD unless otherwise stated.</li>
+      <li>Booking confirmation required to secure services.</li>
+    </ul>
+    <p style="margin-top: 20px;">
+      <strong>Workflow ID:</strong> ${workflowId}<br>
+      <strong>Generated:</strong> ${date}
+    </p>
+  </div>
+</body>
+</html>`;
+    
+    // Create blob and download
+    const blob = new Blob(['\ufeff', htmlContent], { 
+      type: 'application/msword' 
+    });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `Tour-Quotation-${workflowId}.doc`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
   };
 
   const getSectionIcon = (section) => {
@@ -540,6 +828,7 @@ const QuotationCard = ({ quotation }) => {
   const breakdown = quotation.total_cost?.breakdown || quotation.breakdown || {};
   const components = quotation.components || {};
   const totalCost = quotation.total_cost?.total_usd || 0;
+  const rfqSummary = quotation.rfq_summary || quotation.rfq_data || {};
 
   const hotels = components.hotel?.recommended_hotels || 
                  components.hotel?.cost?.breakdown || 
@@ -551,6 +840,9 @@ const QuotationCard = ({ quotation }) => {
 
   return (
     <Card
+      role="article"
+      aria-label="Tour quotation"
+      aria-describedby="quotation-details"
       sx={{
         maxWidth: '100%',
         mx: 'auto',
@@ -613,12 +905,122 @@ const QuotationCard = ({ quotation }) => {
               >
                 Official Tour Quotation
               </Typography>
-              <Typography variant="caption" sx={{ color: '#666', fontSize: '0.8125rem', fontWeight: 500 }}>
-                Comprehensive pricing breakdown
-              </Typography>
+              <Stack direction="row" spacing={2} alignItems="center" flexWrap="wrap">
+                {quotation.workflow_id && (
+                  <Typography variant="caption" sx={{ color: '#666', fontSize: '0.8125rem', fontWeight: 600 }}>
+                    Quotation #{quotation.workflow_id.split('_').pop()?.substring(0, 8) || 'N/A'}
+                  </Typography>
+                )}
+                <Typography variant="caption" sx={{ color: '#999', fontSize: '0.75rem' }}>
+                  {new Date().toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' })}
+                </Typography>
+              </Stack>
             </Box>
           </Stack>
-          <Stack direction="row" spacing={1} className="no-print">
+          <Stack direction="row" spacing={1} className="no-print" alignItems="center">
+            {/* Prominent Word Download Button */}
+            <Tooltip title="Download as Word Document" arrow>
+              <Button
+                variant="contained"
+                startIcon={<WordIcon />}
+                onClick={downloadAsWord}
+                aria-label="Download quotation as Word document"
+                tabIndex={0}
+                sx={{
+                  background: 'linear-gradient(135deg, #000000 0%, #1a1a1a 100%)',
+                  color: '#ffffff',
+                  fontWeight: 600,
+                  px: { xs: 2, sm: 2.5 },
+                  py: { xs: 0.75, sm: 1 },
+                  borderRadius: 2,
+                  boxShadow: '0 4px 12px rgba(0,0,0,0.15)',
+                  fontSize: { xs: '0.875rem', sm: '0.9375rem' },
+                  minHeight: { xs: '44px', sm: 'auto' },
+                  '&:hover': {
+                    background: 'linear-gradient(135deg, #1a1a1a 0%, #000000 100%)',
+                    transform: 'translateY(-2px)',
+                    boxShadow: '0 6px 20px rgba(0,0,0,0.2)',
+                  },
+                  '&:focus-visible': {
+                    outline: '2px solid #ffffff',
+                    outlineOffset: '2px',
+                  },
+                  transition: 'all 0.2s cubic-bezier(0.4, 0, 0.2, 1)',
+                }}
+              >
+                Download
+              </Button>
+            </Tooltip>
+            
+            {onRefine && (
+              <Tooltip title="Refine Quotation">
+                <IconButton
+                  onClick={() => onRefine(quotation)}
+                  sx={{
+                    background: '#f5f5f5',
+                    border: '1px solid #e5e5e5',
+                    borderRadius: 2,
+                    p: 1.25,
+                    '&:hover': {
+                      background: '#000000',
+                      color: '#ffffff',
+                      borderColor: '#000000',
+                      transform: 'translateY(-2px)',
+                      boxShadow: '0 4px 12px rgba(0,0,0,0.15)',
+                    },
+                    transition: 'all 0.2s cubic-bezier(0.4, 0, 0.2, 1)',
+                  }}
+                >
+                  <EditIcon sx={{ fontSize: 20 }} />
+                </IconButton>
+              </Tooltip>
+            )}
+            {onDuplicate && (
+              <Tooltip title="Duplicate Quotation">
+                <IconButton
+                  onClick={() => onDuplicate(quotation)}
+                  sx={{
+                    background: '#f5f5f5',
+                    border: '1px solid #e5e5e5',
+                    borderRadius: 2,
+                    p: 1.25,
+                    '&:hover': {
+                      background: '#000000',
+                      color: '#ffffff',
+                      borderColor: '#000000',
+                      transform: 'translateY(-2px)',
+                      boxShadow: '0 4px 12px rgba(0,0,0,0.15)',
+                    },
+                    transition: 'all 0.2s cubic-bezier(0.4, 0, 0.2, 1)',
+                  }}
+                >
+                  <DuplicateIcon sx={{ fontSize: 20 }} />
+                </IconButton>
+              </Tooltip>
+            )}
+            {onShare && (
+              <Tooltip title="Share Quotation">
+                <IconButton
+                  onClick={() => onShare(quotation)}
+                  sx={{
+                    background: '#f5f5f5',
+                    border: '1px solid #e5e5e5',
+                    borderRadius: 2,
+                    p: 1.25,
+                    '&:hover': {
+                      background: '#000000',
+                      color: '#ffffff',
+                      borderColor: '#000000',
+                      transform: 'translateY(-2px)',
+                      boxShadow: '0 4px 12px rgba(0,0,0,0.15)',
+                    },
+                    transition: 'all 0.2s cubic-bezier(0.4, 0, 0.2, 1)',
+                  }}
+                >
+                  <ShareIcon sx={{ fontSize: 20 }} />
+                </IconButton>
+              </Tooltip>
+            )}
             <Tooltip title="Download as Text">
               <IconButton
                 onClick={downloadAsText}
@@ -664,6 +1066,73 @@ const QuotationCard = ({ quotation }) => {
           </Stack>
         </Stack>
         <Divider sx={{ my: 3, borderColor: '#e5e5e5' }} />
+
+        {/* Professional Quotation Details Section */}
+        <Box
+          sx={{
+            mb: 4,
+            p: 3,
+            bgcolor: '#fafafa',
+            borderRadius: 2,
+            border: '1px solid #e5e5e5',
+          }}
+        >
+          <Typography
+            variant="subtitle1"
+            sx={{
+              fontWeight: 700,
+              mb: 2,
+              color: '#000000',
+              fontSize: '1rem',
+              textTransform: 'uppercase',
+              letterSpacing: '0.05em',
+            }}
+          >
+            Tour Details
+          </Typography>
+          <Grid container spacing={2}>
+            {rfqSummary.tourist_type && (
+              <Grid item xs={12} sm={6}>
+                <Typography variant="body2" sx={{ color: '#666', mb: 0.5, fontSize: '0.75rem' }}>
+                  Tourist Type
+                </Typography>
+                <Typography variant="body1" sx={{ fontWeight: 600, color: '#000000' }}>
+                  {rfqSummary.tourist_type.replace(/_/g, ' ').toUpperCase()}
+                </Typography>
+              </Grid>
+            )}
+            {rfqSummary.guests && (
+              <Grid item xs={12} sm={6}>
+                <Typography variant="body2" sx={{ color: '#666', mb: 0.5, fontSize: '0.75rem' }}>
+                  Guests
+                </Typography>
+                <Typography variant="body1" sx={{ fontWeight: 600, color: '#000000' }}>
+                  {rfqSummary.guests.adults || 0} Adult(s), {rfqSummary.guests.children || 0} Child(ren)
+                </Typography>
+              </Grid>
+            )}
+            {rfqSummary.locations && rfqSummary.locations.length > 0 && (
+              <Grid item xs={12} sm={6}>
+                <Typography variant="body2" sx={{ color: '#666', mb: 0.5, fontSize: '0.75rem' }}>
+                  Locations
+                </Typography>
+                <Typography variant="body1" sx={{ fontWeight: 600, color: '#000000' }}>
+                  {rfqSummary.locations.join(', ')}
+                </Typography>
+              </Grid>
+            )}
+            {rfqSummary.activities && rfqSummary.activities.length > 0 && (
+              <Grid item xs={12} sm={6}>
+                <Typography variant="body2" sx={{ color: '#666', mb: 0.5, fontSize: '0.75rem' }}>
+                  Activities
+                </Typography>
+                <Typography variant="body1" sx={{ fontWeight: 600, color: '#000000' }}>
+                  {rfqSummary.activities.join(', ')}
+                </Typography>
+              </Grid>
+            )}
+          </Grid>
+        </Box>
 
         {renderHotelSection(hotels, hotelTotal)}
         {renderActivitySection(activities, activitiesTotal)}

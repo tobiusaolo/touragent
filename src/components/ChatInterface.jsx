@@ -23,6 +23,11 @@ import MessageList from './MessageList'
 import AgentAvatar from './AgentAvatar'
 import ProgressIndicator from './ProgressIndicator'
 import QuotationCard from './QuotationCard'
+import ConnectionStatus from './ConnectionStatus'
+import EmptyState from './EmptyState'
+import Toast from './Toast'
+import CommandPalette from './CommandPalette'
+import ShortcutsDialog from './ShortcutsDialog'
 import { useWebSocket } from '../hooks/useWebSocket'
 
 function ChatInterface() {
@@ -54,6 +59,11 @@ function ChatInterface() {
   const [isStreaming, setIsStreaming] = useState(false)
   const [chatHistory, setChatHistory] = useState([])
   const [currentQuotation, setCurrentQuotation] = useState(null) // Store current quotation data
+  const [toast, setToast] = useState({ open: false, message: '', type: 'info' })
+  const [lastConnected, setLastConnected] = useState(null)
+  const [commandPaletteOpen, setCommandPaletteOpen] = useState(false)
+  const [shortcutsDialogOpen, setShortcutsDialogOpen] = useState(false)
+  const [messageHistoryIndex, setMessageHistoryIndex] = useState(-1)
   const messagesEndRef = useRef(null)
   const inputRef = useRef(null)
   
@@ -66,6 +76,11 @@ function ChatInterface() {
       if (latestMessage.type && latestMessage.type !== 'final_result' && latestMessage.type !== 'error') {
         setIsStreaming(true)
         setIsLoading(true)
+      }
+      
+      // Track connection status
+      if (wsConnected && !lastConnected) {
+        setLastConnected(new Date())
       }
       
       // Handle final result
@@ -96,12 +111,16 @@ function ChatInterface() {
       if (latestMessage.type === 'error') {
         setIsStreaming(false)
         setIsLoading(false)
+        // Find the last user message for retry
+        const lastUserMsg = messages.filter(m => m.role === 'user').pop()
         const errorMsg = {
           id: Date.now(),
           role: 'assistant',
           content: `❌ Error: ${latestMessage.message || latestMessage.error || 'Unknown error'}`,
           timestamp: new Date(),
-          error: true
+          error: true,
+          isTypingComplete: false,
+          originalUserMessage: lastUserMsg?.content || null
         }
         setMessages((prev) => [...prev, errorMsg])
       }
@@ -187,6 +206,8 @@ function ChatInterface() {
         content: errorContent,
         timestamp: new Date(),
         error: true,
+        isTypingComplete: false,
+        originalUserMessage: userInput // Store for retry
       }
       setMessages((prev) => [...prev, errorMessage])
     } finally {
@@ -214,10 +235,22 @@ function ChatInterface() {
         timestamp: new Date(),
         thinking: chatResponse.thinking,
         action: chatResponse.action,
-        data: chatResponse
+        data: chatResponse,
+        isTypingComplete: false // Enable typewriter effect
       }
       
       setMessages((prev) => [...prev, assistantMessage])
+      
+      // Mark as complete after a delay (for typewriter effect)
+      setTimeout(() => {
+        setMessages((prev) => 
+          prev.map(msg => 
+            msg.id === assistantMessage.id 
+              ? { ...msg, isTypingComplete: true }
+              : msg
+          )
+        )
+      }, (chatResponse.response || chatResponse.message || '').length * 15 + 1000)
       
       // If quotation was generated/refined, update current quotation
       if (chatResponse.quotation) {
@@ -900,10 +933,122 @@ function ChatInterface() {
   }
 
 
+  // Keyboard shortcuts handler
+  useEffect(() => {
+    const handleGlobalKeyDown = (e) => {
+      const isMac = navigator.platform.toUpperCase().indexOf('MAC') >= 0
+      const modKey = isMac ? e.metaKey : e.ctrlKey
+      
+      // Cmd/Ctrl + K: Open command palette
+      if (modKey && e.key === 'k' && !e.shiftKey) {
+        e.preventDefault()
+        setCommandPaletteOpen(true)
+        return
+      }
+      
+      // Cmd/Ctrl + L: Focus input
+      if (modKey && e.key === 'l' && !e.shiftKey) {
+        e.preventDefault()
+        inputRef.current?.focus()
+        return
+      }
+      
+      // Cmd/Ctrl + /: Show shortcuts
+      if (modKey && e.key === '/') {
+        e.preventDefault()
+        setShortcutsDialogOpen(true)
+        return
+      }
+      
+      // Esc: Close dialogs
+      if (e.key === 'Escape') {
+        if (commandPaletteOpen) {
+          setCommandPaletteOpen(false)
+          return
+        }
+        if (shortcutsDialogOpen) {
+          setShortcutsDialogOpen(false)
+          return
+        }
+      }
+      
+      // Arrow keys: Navigate message history (when input is focused)
+      if (document.activeElement === inputRef.current) {
+        if (e.key === 'ArrowUp' && !e.shiftKey && !e.altKey && !modKey) {
+          e.preventDefault()
+          const userMessages = messages.filter(m => m.role === 'user')
+          if (userMessages.length > 0) {
+            const newIndex = messageHistoryIndex < 0 
+              ? userMessages.length - 1 
+              : Math.max(0, messageHistoryIndex - 1)
+            setMessageHistoryIndex(newIndex)
+            setInput(userMessages[newIndex].content)
+          }
+          return
+        }
+        
+        if (e.key === 'ArrowDown' && !e.shiftKey && !e.altKey && !modKey) {
+          e.preventDefault()
+          const userMessages = messages.filter(m => m.role === 'user')
+          if (messageHistoryIndex >= 0) {
+            const newIndex = messageHistoryIndex + 1
+            if (newIndex >= userMessages.length) {
+              setMessageHistoryIndex(-1)
+              setInput('')
+            } else {
+              setMessageHistoryIndex(newIndex)
+              setInput(userMessages[newIndex].content)
+            }
+          }
+          return
+        }
+      }
+    }
+    
+    window.addEventListener('keydown', handleGlobalKeyDown)
+    return () => window.removeEventListener('keydown', handleGlobalKeyDown)
+  }, [commandPaletteOpen, shortcutsDialogOpen, messages, messageHistoryIndex])
+
   const handleKeyPress = (e) => {
+    const isMac = navigator.platform.toUpperCase().indexOf('MAC') >= 0
+    const modKey = isMac ? e.metaKey : e.ctrlKey
+    
+    // Cmd/Ctrl + Enter: Send message
+    if (modKey && e.key === 'Enter') {
+      e.preventDefault()
+      handleSend()
+      return
+    }
+    
+    // Enter (without modifier): Send message
     if (e.key === 'Enter' && !e.shiftKey) {
       e.preventDefault()
       handleSend()
+    }
+    
+    // Reset message history index when typing
+    if (e.key !== 'ArrowUp' && e.key !== 'ArrowDown') {
+      setMessageHistoryIndex(-1)
+    }
+  }
+  
+  const handleCommandPaletteCommand = (command, data) => {
+    switch (command) {
+      case 'focus-input':
+        inputRef.current?.focus()
+        break
+      case 'clear-chat':
+        handleClearChat()
+        break
+      case 'show-shortcuts':
+        setShortcutsDialogOpen(true)
+        break
+      case 'use-history':
+        setInput(data)
+        inputRef.current?.focus()
+        break
+      default:
+        break
     }
   }
 
@@ -918,6 +1063,134 @@ function ChatInterface() {
     ])
     setChatHistory([])
     setCurrentQuotation(null)
+    setToast({ open: true, message: 'Chat cleared', type: 'success' })
+  }
+
+  // Message action handlers
+  const handleRetryMessage = async (message) => {
+    try {
+      if (message.role === 'user') {
+        // Retry user message
+        setInput(message.content)
+        inputRef.current?.focus()
+        // Remove the user message and any error that followed
+        const messageIndex = messages.findIndex(m => m.id === message.id)
+        if (messageIndex !== -1) {
+          setMessages(prev => prev.slice(0, messageIndex))
+        }
+        // Wait a moment then send
+        setTimeout(async () => {
+          await handleSend()
+        }, 100)
+        setToast({ open: true, message: 'Retrying message...', type: 'info' })
+      } else if (message.error) {
+        // Retry using stored original message or find the last user message
+        const retryText = message.originalUserMessage || (() => {
+          const messageIndex = messages.findIndex(m => m.id === message.id)
+          if (messageIndex > 0) {
+            for (let i = messageIndex - 1; i >= 0; i--) {
+              if (messages[i].role === 'user') {
+                return messages[i].content
+              }
+            }
+          }
+          return null
+        })()
+        
+        if (retryText) {
+          // Remove error message and any messages after the user message
+          const messageIndex = messages.findIndex(m => m.id === message.id)
+          if (messageIndex > 0) {
+            for (let i = messageIndex - 1; i >= 0; i--) {
+              if (messages[i].role === 'user') {
+                setMessages(prev => prev.slice(0, i + 1))
+                break
+              }
+            }
+          } else {
+            // Just remove the error message
+            setMessages(prev => prev.filter(m => m.id !== message.id))
+          }
+          
+          setInput(retryText)
+          inputRef.current?.focus()
+          setToast({ open: true, message: 'Retrying request...', type: 'info' })
+          
+          // Wait a moment then send
+          setTimeout(async () => {
+            await handleSend()
+          }, 100)
+        } else {
+          setToast({ open: true, message: 'Cannot retry: original message not found', type: 'error' })
+        }
+      }
+    } catch (error) {
+      console.error('Retry failed:', error)
+      setToast({ open: true, message: 'Failed to retry. Please try again.', type: 'error' })
+    }
+  }
+
+  const handleEditMessage = (message) => {
+    if (message.role === 'user') {
+      setInput(message.content)
+      inputRef.current?.focus()
+      // Remove the message being edited
+      setMessages(prev => prev.filter(m => m.id !== message.id))
+      setToast({ open: true, message: 'Message ready to edit', type: 'info' })
+    }
+  }
+
+  const handleDeleteMessage = (messageId) => {
+    setMessages(prev => prev.filter(m => m.id !== messageId))
+    setToast({ open: true, message: 'Message deleted', type: 'success' })
+  }
+
+  const handleRegenerateResponse = async (message) => {
+    // Find the user message that prompted this response
+    const messageIndex = messages.findIndex(m => m.id === message.id)
+    if (messageIndex > 0) {
+      const previousUserMessage = messages[messageIndex - 1]
+      if (previousUserMessage.role === 'user') {
+        // Remove the assistant message and regenerate
+        setMessages(prev => prev.filter(m => m.id !== message.id))
+        setInput(previousUserMessage.content)
+        await handleSend()
+      }
+    }
+  }
+
+  const handleFeedback = (type) => {
+    setToast({ 
+      open: true, 
+      message: `Thank you for your feedback!`, 
+      type: 'success' 
+    })
+    // Here you could send feedback to backend
+  }
+
+  const handleShareMessage = async (message) => {
+    if (message.isQuotation && message.data) {
+      const shareData = {
+        title: 'Tour Quotation',
+        text: 'Check out this tour quotation!',
+        url: window.location.href,
+      }
+      try {
+        if (navigator.share) {
+          await navigator.share(shareData)
+        } else {
+          await navigator.clipboard.writeText(window.location.href)
+          setToast({ open: true, message: 'Link copied to clipboard', type: 'success' })
+        }
+      } catch (err) {
+        console.error('Share failed:', err)
+      }
+    }
+  }
+
+  const handleExampleClick = (exampleText) => {
+    setInput(exampleText)
+    inputRef.current?.focus()
   }
 
   return (
@@ -963,9 +1236,16 @@ function ChatInterface() {
           >
             Tour Agent Assistant
           </Typography>
+          <ConnectionStatus 
+            isConnected={wsConnected} 
+            lastConnected={lastConnected}
+            isWebSocket={true}
+          />
+          <Box sx={{ width: 8 }} />
           <IconButton 
             onClick={handleClearChat} 
             title="Clear Chat"
+            aria-label="Clear chat"
             sx={{ 
               color: '#000000',
               border: '1px solid #e5e5e5',
@@ -1024,14 +1304,44 @@ function ChatInterface() {
               background: '#333333',
             },
           }}>
-            <MessageList messages={messages} isLoading={isLoading} />
+            {messages.length === 1 && messages[0].id === 1 ? (
+              <EmptyState onExampleClick={handleExampleClick} />
+            ) : (
+              <MessageList 
+                messages={messages} 
+                isLoading={isLoading}
+                isStreaming={isStreaming}
+                onRetryMessage={handleRetryMessage}
+                onEditMessage={handleEditMessage}
+                onDeleteMessage={handleDeleteMessage}
+                onRegenerateResponse={handleRegenerateResponse}
+                onFeedback={handleFeedback}
+                onShareMessage={handleShareMessage}
+                onRefineQuotation={(quotation) => {
+                  setInput("Refine this quotation")
+                  inputRef.current?.focus()
+                }}
+                onDuplicateQuotation={(quotation) => {
+                  const duplicatedMessage = {
+                    id: Date.now(),
+                    role: 'assistant',
+                    content: '',
+                    timestamp: new Date(),
+                    data: quotation,
+                    isQuotation: true
+                  }
+                  setMessages(prev => [...prev, duplicatedMessage])
+                  setToast({ open: true, message: 'Quotation duplicated', type: 'success' })
+                }}
+              />
+            )}
           </Box>
-          {isStreaming && (
-            <Box sx={{ pt: 2 }}>
+          {(isStreaming || isLoading) && messages.length > 0 && messages[messages.length - 1].role === 'user' && (
+            <Box sx={{ pt: 2, px: 2 }}>
               <ProgressIndicator 
-                currentMessage={currentMessage} 
+                currentMessage={currentMessage || { type: 'thinking', message: 'Processing your request...' }} 
                 progress={currentProgress} 
-                isConnected={wsConnected} 
+                isConnected={wsConnected || true} 
               />
             </Box>
           )}
@@ -1054,11 +1364,19 @@ function ChatInterface() {
             maxRows={4}
             placeholder="Ask me anything about your tour..."
             value={input}
-            onChange={(e) => setInput(e.target.value)}
+            onChange={(e) => {
+              setInput(e.target.value)
+              setMessageHistoryIndex(-1) // Reset history when typing
+            }}
             onKeyPress={handleKeyPress}
+            onKeyDown={handleKeyPress}
             disabled={isLoading}
             inputRef={inputRef}
             variant="outlined"
+            aria-label="Message input"
+            aria-describedby="input-help-text"
+            role="textbox"
+            tabIndex={0}
             sx={{
               '& .MuiOutlinedInput-root': {
                 borderRadius: 3,
@@ -1101,6 +1419,9 @@ function ChatInterface() {
           <IconButton
             onClick={handleSend}
             disabled={!input.trim() || isLoading}
+            aria-label="Send message"
+            aria-describedby="send-button-help"
+            tabIndex={0}
             sx={{
               background: 'linear-gradient(135deg, #000000 0%, #1a1a1a 100%)',
               color: '#ffffff',
@@ -1128,17 +1449,39 @@ function ChatInterface() {
             {isLoading ? <CircularProgress size={22} sx={{ color: '#ffffff' }} /> : <SendIcon sx={{ fontSize: 22 }} />}
           </IconButton>
         </Box>
-          <Box sx={{ mt: 2.5, display: 'flex', gap: 1.5, flexWrap: 'wrap' }}>
+          <Box 
+            sx={{ 
+              mt: { xs: 2, sm: 2.5 }, 
+              display: 'flex', 
+              gap: { xs: 1, sm: 1.5 }, 
+              flexWrap: 'wrap' 
+            }}
+            role="group"
+            aria-label="Example queries"
+          >
             <Chip
               label="Try: 'I want to go gorilla trekking in Bwindi for 3 nights, 2 adults'"
               size="small"
               variant="outlined"
-              onClick={() => setInput("I want to go gorilla trekking in Bwindi for 3 nights, 2 adults")}
+              onClick={() => {
+                setInput("I want to go gorilla trekking in Bwindi for 3 nights, 2 adults")
+                inputRef.current?.focus()
+              }}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter' || e.key === ' ') {
+                  e.preventDefault()
+                  setInput("I want to go gorilla trekking in Bwindi for 3 nights, 2 adults")
+                  inputRef.current?.focus()
+                }
+              }}
+              role="button"
+              tabIndex={0}
+              aria-label="Example query: gorilla trekking in Bwindi"
               sx={{
                 borderColor: '#e5e5e5',
                 color: '#000000',
-                fontSize: '0.8125rem',
-                height: '36px',
+                fontSize: { xs: '0.75rem', sm: '0.8125rem' },
+                height: { xs: '32px', sm: '36px' },
                 fontWeight: 500,
                 borderRadius: 2,
                 transition: 'all 0.2s cubic-bezier(0.4, 0, 0.2, 1)',
@@ -1148,6 +1491,10 @@ function ChatInterface() {
                   borderColor: '#000000',
                   transform: 'translateY(-1px)',
                   boxShadow: '0 2px 8px rgba(0,0,0,0.15)',
+                },
+                '&:focus-visible': {
+                  outline: '2px solid #000000',
+                  outlineOffset: '2px',
                 },
               }}
             />
@@ -1155,12 +1502,25 @@ function ChatInterface() {
               label="Try: 'Budget safari trip for 5 days, 1 adult'"
               size="small"
               variant="outlined"
-              onClick={() => setInput("Budget safari trip for 5 days, 1 adult")}
+              onClick={() => {
+                setInput("Budget safari trip for 5 days, 1 adult")
+                inputRef.current?.focus()
+              }}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter' || e.key === ' ') {
+                  e.preventDefault()
+                  setInput("Budget safari trip for 5 days, 1 adult")
+                  inputRef.current?.focus()
+                }
+              }}
+              role="button"
+              tabIndex={0}
+              aria-label="Example query: budget safari trip"
               sx={{
                 borderColor: '#e5e5e5',
                 color: '#000000',
-                fontSize: '0.8125rem',
-                height: '36px',
+                fontSize: { xs: '0.75rem', sm: '0.8125rem' },
+                height: { xs: '32px', sm: '36px' },
                 fontWeight: 500,
                 borderRadius: 2,
                 transition: 'all 0.2s cubic-bezier(0.4, 0, 0.2, 1)',
@@ -1171,10 +1531,43 @@ function ChatInterface() {
                   transform: 'translateY(-1px)',
                   boxShadow: '0 2px 8px rgba(0,0,0,0.15)',
                 },
+                '&:focus-visible': {
+                  outline: '2px solid #000000',
+                  outlineOffset: '2px',
+                },
               }}
             />
           </Box>
         </Container>
+      </Box>
+      
+      <Toast
+        open={toast.open}
+        onClose={() => setToast({ ...toast, open: false })}
+        message={toast.message}
+        type={toast.type}
+      />
+      
+      <CommandPalette
+        open={commandPaletteOpen}
+        onClose={() => setCommandPaletteOpen(false)}
+        onCommand={handleCommandPaletteCommand}
+        messageHistory={messages.filter(m => m.role === 'user')}
+      />
+      
+      <ShortcutsDialog
+        open={shortcutsDialogOpen}
+        onClose={() => setShortcutsDialogOpen(false)}
+      />
+      
+      {/* Hidden help text for screen readers */}
+      <Box sx={{ display: 'none' }} aria-live="polite" aria-atomic="true">
+        <Typography id="input-help-text">
+          Type your message and press Enter to send. Use Cmd/Ctrl+K to open command palette.
+        </Typography>
+        <Typography id="send-button-help">
+          Click to send message or press Enter
+        </Typography>
       </Box>
     </Box>
   )
